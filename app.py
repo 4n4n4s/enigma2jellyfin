@@ -67,11 +67,11 @@ def safe_channel_id(service_ref):
     return "".join(c if c.isalnum() else "_" for c in service_ref)
 
 def write_epg_xml(channels, filename, host, port):
-    tv = ET.Element("tv", attrib={"generator-info-name": "enigma2-to-jellyfin"})
+    tv = ET.Element("tv", attrib={"generator-info-name": "enigma2jellyfin"})
     base_url = f"http://{host}:{port}"
 
     for ch in channels:
-        chan_id = safe_channel_id(ch["ref"])
+        chan_id = safe_channel_id(ch["ref"][:-1])
         ch_elem = ET.SubElement(tv, "channel", id=chan_id)
         ET.SubElement(ch_elem, "display-name").text = ch["name"]
         ET.SubElement(ch_elem, "icon", src=f"{base_url}/picon/{chan_id}.png")
@@ -90,15 +90,15 @@ def write_epg_xml(channels, filename, host, port):
     tree.write(filename, encoding="utf-8", xml_declaration=True)
     print(f"✅ Wrote EPG XML to {filename}")
 
-def write_m3u(channels, filename, host, port):
+def write_m3u(channels, filename, host, streamport):
     lines = ["#EXTM3U"]
-    base_url = f"http://{host}:{port}"
+    base_url = f"http://{host}:{streamport}"
 
     for ch in channels:
-        chan_id = safe_channel_id(ch["ref"])
+        chan_id = safe_channel_id(ch["ref"][:-1])
         logo = f"{base_url}/picon/{chan_id}.png"
-        stream = f"{base_url}/stream/{urllib.parse.quote(ch['ref'], safe='')}"
-        lines.append(f'#EXTINF:-1 tvg-id="{chan_id}" tvg-name="{ch["name"]}" tvg-logo="{logo}",{ch["name"]}')
+        stream = f"{base_url}/{ch['ref']}"
+        lines.append(f'#EXTINF:-1 tvg-id="{chan_id}" tvg-name="{ch["name"]}" tvg-logo="{logo}", {ch["name"]}')
         lines.append(stream)
 
     with open(filename, "w") as f:
@@ -108,6 +108,7 @@ def write_m3u(channels, filename, host, port):
 def generate_files():
     host = CONFIG["host"]
     port = CONFIG["port"]
+    streamport = CONFIG["streamport"]
     bouquet = CONFIG["bouquet"]
     epg_file = CONFIG["epg_file"]
     m3u_file = CONFIG["m3u_file"]
@@ -124,7 +125,7 @@ def generate_files():
         ch["epg"] = fetch_epg(host, port, ch["ref"])
 
     write_epg_xml(channels, epg_file, host, port)
-    write_m3u(channels, m3u_file, host, port)
+    write_m3u(channels, m3u_file, host, streamport)
     print("✅ Generation complete.")
 
 def schedule_job(interval_minutes):
@@ -152,12 +153,13 @@ def serve_m3u():
 @click.command()
 @click.option("--host", envvar="ENIGMA2_HOST", default="10.0.0.101", help="Enigma2 box IP or hostname")
 @click.option("--port", envvar="ENIGMA2_PORT", default=80, help="OpenWebIf port")
+@click.option("--streamport", envvar="ENIGMA2_STREAMPORT", default=8001, help="OpenWebIf stream port")
 @click.option("--bouquet", envvar="BOUQUET", default="userbouquet.f52ab.tv", help="Bouquet name")
 @click.option("--epg-file", envvar="EPG_FILE", default="data/epg.xml", help="Output XMLTV filename")
 @click.option("--m3u-file", envvar="M3U_FILE", default="data/playlist.m3u", help="Output M3U filename")
 @click.option("--interval", envvar="REFRESH_INTERVAL", default=60, help="Regeneration interval in minutes")
 @click.option("--http-port", envvar="HTTP_PORT", default=8080, help="Port to serve HTTP files")
-def main(host, port, bouquet, epg_file, m3u_file, interval, http_port):
+def main(host, port, streamport, bouquet, epg_file, m3u_file, interval, http_port):
     global CONFIG
     ensure_data_dir()
 
@@ -167,6 +169,7 @@ def main(host, port, bouquet, epg_file, m3u_file, interval, http_port):
     CONFIG = {
         "host": host,
         "port": port,
+        "streamport": streamport,
         "bouquet": bouquet,
         "epg_file": epg_file,
         "m3u_file": m3u_file,
