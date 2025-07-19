@@ -1,0 +1,12 @@
+{
+  "name": "Enigma2 Jellyfin Python Dev",
+  "image": "mcr.microsoft.com/vscode/devcontainers/python:3.13",
+  "forwardPorts": [8080],
+  "extensions": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-azuretools.vscode-docker"
+  ],
+  "remoteUser": "vscode",
+  "postCreateCommand": "pip install --no-cache-dir -r requirements.txt"
+}
