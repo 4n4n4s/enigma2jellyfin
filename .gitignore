@@ -210,3 +210,4 @@ __marimo__/
 *.sqlite
 epg.xml
 playlist.m3u
+data/*

@@ -1,3 +1,4 @@
+import os
 import requests
 import requests_cache
 import xml.etree.ElementTree as ET
@@ -8,14 +9,15 @@ import threading
 import time
 from flask import Flask, send_file, abort
 
-# Initialize requests cache (file-based, expires after 15 minutes)
-requests_cache.install_cache('enigma2_cache', expire_after=900)
-
 app = Flask(__name__)
 
 # Globals to store file paths and config
 CONFIG = {}
 FILES = {}
+
+def ensure_data_dir():
+    if not os.path.exists("data"):
+        os.makedirs("data")
 
 def get_bouquet_reference(host, port, bouquet_name):
     url = f"http://{host}:{port}/web/getservices"
@@ -148,15 +150,20 @@ def serve_m3u():
         abort(404)
 
 @click.command()
-@click.option("--host", default="10.0.0.101", help="Enigma2 box IP or hostname")
-@click.option("--port", default=80, help="OpenWebIf port")
-@click.option("--bouquet", default="userbouquet.f52ab.tv", help="Bouquet name")
-@click.option("--epg-file", default="epg.xml", help="Output XMLTV filename")
-@click.option("--m3u-file", default="playlist.m3u", help="Output M3U filename")
-@click.option("--interval", default=60, help="Regeneration interval in minutes")
-@click.option("--http-port", default=8080, help="Port to serve HTTP files")
+@click.option("--host", envvar="ENIGMA2_HOST", default="10.0.0.101", help="Enigma2 box IP or hostname")
+@click.option("--port", envvar="ENIGMA2_PORT", default=80, help="OpenWebIf port")
+@click.option("--bouquet", envvar="BOUQUET", default="userbouquet.f52ab.tv", help="Bouquet name")
+@click.option("--epg-file", envvar="EPG_FILE", default="data/epg.xml", help="Output XMLTV filename")
+@click.option("--m3u-file", envvar="M3U_FILE", default="data/playlist.m3u", help="Output M3U filename")
+@click.option("--interval", envvar="REFRESH_INTERVAL", default=60, help="Regeneration interval in minutes")
+@click.option("--http-port", envvar="HTTP_PORT", default=8080, help="Port to serve HTTP files")
 def main(host, port, bouquet, epg_file, m3u_file, interval, http_port):
     global CONFIG
+    ensure_data_dir()
+
+    # Install requests cache in data directory
+    requests_cache.install_cache('data/enigma2_cache', expire_after=900)
+
     CONFIG = {
         "host": host,
         "port": port,
@@ -172,8 +179,8 @@ def main(host, port, bouquet, epg_file, m3u_file, interval, http_port):
     try:
         generate_files()
     except Exception as e:
-                print(f"❌ Error during generation: {e}")
-    
+        print(f"❌ Error during generation: {e}")
+
     # Start scheduled regeneration in background thread
     thread = threading.Thread(target=schedule_job, args=(interval,), daemon=True)
     thread.start()
