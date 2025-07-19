@@ -90,6 +90,16 @@ def write_epg_xml(channels, filename, host, port):
     tree.write(filename, encoding="utf-8", xml_declaration=True)
     print(f"✅ Wrote EPG XML to {filename}")
 
+def extract_program_id(service_ref):
+    try:
+        parts = service_ref.split(":")
+        if len(parts) >= 4:
+            hex_id = parts[3]
+            return int(hex_id, 16)
+    except Exception:
+        pass
+    return None
+
 def write_m3u(channels, filename, host, streamport):
     lines = ["#EXTM3U"]
     base_url = f"http://{host}:{streamport}"
@@ -98,7 +108,12 @@ def write_m3u(channels, filename, host, streamport):
         chan_id = safe_channel_id(ch["ref"][:-1])
         logo = f"{base_url}/picon/{chan_id}.png"
         stream = f"{base_url}/{ch['ref']}"
+        pid = extract_program_id(ch['ref'])
+
+        lines.append("#EXTVLCOPT:http-reconnect=true")
         lines.append(f'#EXTINF:-1 tvg-id="{chan_id}" tvg-name="{ch["name"]}" tvg-logo="{logo}", {ch["name"]}')
+        if pid:
+            lines.append(f'#EXTVLCOPT:program={pid}')
         lines.append(stream)
 
     with open(filename, "w") as f:
@@ -164,7 +179,7 @@ def main(host, port, streamport, bouquet, epg_file, m3u_file, interval, http_por
     ensure_data_dir()
 
     # Install requests cache in data directory
-    requests_cache.install_cache('data/enigma2_cache', expire_after=900)
+    requests_cache.install_cache('data/enigma2_cache', expire_after=60*60*24)
 
     CONFIG = {
         "host": host,
