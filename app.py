@@ -11,7 +11,6 @@ from flask import Flask, send_file, abort
 
 app = Flask(__name__)
 
-# Globals to store file paths and config
 CONFIG = {}
 FILES = {}
 
@@ -53,11 +52,22 @@ def fetch_epg(host, port, service_ref):
         try:
             start = int(ev.findtext("e2eventstart"))
             duration = int(ev.findtext("e2eventduration"))
+
+            genre_text = ev.findtext("e2eventgenre", default="")
+            genres = []
+            if genre_text:
+                if ":" in genre_text:
+                    base = genre_text.split(":", 1)[0].strip()
+                else:
+                    base = genre_text.strip()
+                genres = [g.strip() for g in base.split("/") if g.strip()]
             events.append({
                 "title": ev.findtext("e2eventtitle", default=""),
                 "desc": ev.findtext("e2eventdescription", default=""),
+                "descext": ev.findtext("e2eventdescriptionextended", default=""),
                 "start": datetime.fromtimestamp(start, tz=timezone.utc),
-                "end": datetime.fromtimestamp(start + duration, tz=timezone.utc)
+                "end": datetime.fromtimestamp(start + duration, tz=timezone.utc),
+                "genres": genres
             })
         except Exception:
             continue
@@ -84,7 +94,10 @@ def write_epg_xml(channels, filename, host, port):
                 channel=chan_id
             )
             ET.SubElement(prog_elem, "title", lang="en").text = prog["title"]
-            ET.SubElement(prog_elem, "desc", lang="en").text = prog["desc"]
+            ET.SubElement(prog_elem, "desc", lang="en").text = prog["desc"] + " " +prog["descext"]
+            if prog["genres"]:
+                for genre in prog["genres"]:
+                    ET.SubElement(prog_elem, "category").text = genre.strip()
 
     tree = ET.ElementTree(tv)
     tree.write(filename, encoding="utf-8", xml_declaration=True)
@@ -114,12 +127,12 @@ def write_m3u(channels, filename, host, port, streamport):
         lines.append("#EXTVLCOPT:http-reconnect=true")
         lines.append(f'#EXTINF:-1 tvg-id="{chan_id}" tvg-name="{ch["name"]}" tvg-logo="{logo}", {ch["name"]}')
         if pid:
-            lines.append(f'#EXTVLCOPT:program={pid}')
+            lines.append(f"#EXTVLCOPT:program={pid}")
         lines.append(stream)
 
     with open(filename, "w") as f:
         f.write("\n".join(lines))
-    print(f"✅ Wrote M3U playlist to {filename}")
+    print(f"✅ Wrote enhanced M3U playlist to {filename}")
 
 def generate_files():
     host = CONFIG["host"]
@@ -179,8 +192,8 @@ def main(host, port, streamport, bouquet, epg_file, m3u_file, interval, http_por
     global CONFIG
     ensure_data_dir()
 
-    # Install requests cache in data directory
-    requests_cache.install_cache('data/enigma2_cache', expire_after=60*60*24)
+    # Enable HTTP response caching
+    requests_cache.install_cache("data/enigma2_cache", expire_after=86400)
 
     CONFIG = {
         "host": host,
@@ -190,21 +203,18 @@ def main(host, port, streamport, bouquet, epg_file, m3u_file, interval, http_por
         "epg_file": epg_file,
         "m3u_file": m3u_file,
     }
-    print(f"Starting with config: {CONFIG}")
-    print(f"Regeneration interval: {interval} minutes")
-    print(f"Serving files on http://0.0.0.0:{http_port}/")
+    print(f"🚀 Starting with config: {CONFIG}")
+    print(f"🔁 Regeneration interval: {interval} minutes")
+    print(f"🌐 Serving files on http://0.0.0.0:{http_port}/")
 
-    # Initial generation
     try:
         generate_files()
     except Exception as e:
-        print(f"❌ Error during generation: {e}")
+        print(f"❌ Initial generation failed: {e}")
 
-    # Start scheduled regeneration in background thread
     thread = threading.Thread(target=schedule_job, args=(interval,), daemon=True)
     thread.start()
 
-    # Run Flask app
     app.run(host="0.0.0.0", port=http_port)
 
 if __name__ == "__main__":
