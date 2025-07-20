@@ -100,14 +100,15 @@ def extract_program_id(service_ref):
         pass
     return None
 
-def write_m3u(channels, filename, host, streamport):
+def write_m3u(channels, filename, host, port, streamport):
     lines = ["#EXTM3U"]
-    base_url = f"http://{host}:{streamport}"
+    base_url = f"http://{host}:{port}"
+    base_streamurl = f"http://{host}:{streamport}"
 
     for ch in channels:
         chan_id = safe_channel_id(ch["ref"][:-1])
         logo = f"{base_url}/picon/{chan_id}.png"
-        stream = f"{base_url}/{ch['ref']}"
+        stream = f"{base_streamurl}/{ch['ref']}"
         pid = extract_program_id(ch['ref'])
 
         lines.append("#EXTVLCOPT:http-reconnect=true")
@@ -140,7 +141,7 @@ def generate_files():
         ch["epg"] = fetch_epg(host, port, ch["ref"])
 
     write_epg_xml(channels, epg_file, host, port)
-    write_m3u(channels, m3u_file, host, streamport)
+    write_m3u(channels, m3u_file, host, port, streamport)
     print("✅ Generation complete.")
 
 def schedule_job(interval_minutes):
