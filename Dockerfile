@@ -1,4 +1,4 @@
-FROM python:3.14.3-slim-bookworm
+FROM python:3.14.5-slim-bookworm
 WORKDIR /app
 
 # Copy requirements and install
